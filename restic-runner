@@ -68,7 +68,7 @@ Options:
 
   --removed    Used with 'diff' command: Show only removed paths
 
- Commands:
+Commands:
   backup
                Runs a backup. By default calls Restic with these opts:
                  --one-file-system
