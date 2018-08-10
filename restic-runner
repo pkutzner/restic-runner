@@ -190,9 +190,7 @@ function human_duration {
     # $2 should be the later timestamp.  Timestamps should be strings
     # in any form that GNU date accepts.
 
-    local ts1=$(date +%s --date "$1")
-    local ts2=$(date +%s --date "$2")
-    local difference=$(( $ts2 - $ts1 ))
+    local difference=$(( $2 - $1 ))
 
     local hours=$(bc <<<"$difference / 60 / 60")
     local minutes=$(bc <<<"$difference / 60 % 60")
@@ -358,8 +356,11 @@ function init {
 }
 
 # * Args
+OS=$(uname -s)
+[[ $OS = "FreeBSD" ]] && getoptbin="/usr/local/bin/getopt"
+[[ $OS = "Linux" ]] && getoptbin="/usr/bin/getopt"
 
-args=$(getopt -n "$0" -o dh -l debug,repo:,set:,tag:,help,added,modified,removed -- "$@") || exit 1
+args=$($getoptbin -n "$0" -o dh -l debug,repo:,set:,tag:,help,added,modified,removed -- "$@") || exit 1
 eval set -- "$args"
 
 while true
@@ -452,7 +453,7 @@ type $command &>/dev/null || die "No such command: $command"
 # du.  Restic outputs its own duration, so there's no reason to
 # duplicate that, but it might be useful to know how much extra time
 # is taken by running du before and after.
-date_before=$(date)
+date_before=$(date +%s)
 du_enabled && du_before=$(repo_du)
 
 # Run command (backup, forget, prune, etc.)
@@ -460,7 +461,7 @@ $command || die "$command failed."
 
 # Log after command
 du_enabled && du_after=$(repo_du)
-date_after=$(date)
+date_after=$(date +%s)
 duration=$(human_duration "$date_before" "$date_after")
 
 if du_enabled
