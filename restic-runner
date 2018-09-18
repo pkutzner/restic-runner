@@ -22,6 +22,42 @@
 
 config_dir=~/.config/backup/restic
 
+# Script locking.  Let's not run if we've already been run.
+LOCKDIR="/tmp/restic-runner-lock"
+PIDFILE="${LOCKDIR}/PID"
+
+# Exit codes and text
+ENO_SUCCESS=0; ETXT[0]="ENO_SUCCESS"
+ENO_GENERAL=1; ETXT[1]="ENO_GENERAL"
+ENO_LOCKFAIL=2; ETXT[2]="ENO_LOCKFAIL"
+ENO_RECVSIG=3; ETXT[3]="ENO_RECVSIG"
+
+trap 'ECODE=$?; echo "[restic-runner] Exit: ${ETXT[ECODE]}($ECODE)" >&2' 0
+echo -n '[restic-runner] Locking: ' >&2
+
+if mkdir "${LOCKDIR}" &>/dev/null; then
+    trap 'ECODE=$?; echo "[restic-runner] Removing lock. Exit: ${ETXT[ECODE]}($ECODE)" >&2; cleanup' 0
+    echo "$$" >"${PIDFILE}"
+    trap 'echo "[restic-runner] Killed by a signal." >&2; cleanup; exit ${ENO_RECVSIG}' 1 2 3 15
+    echo "success, installed signal handlers"
+else
+    OTHERPID="$(cat "${PIDFILE}")"
+    if [ $? != 0 ]; then
+        echo "lock failed, PID ${OTHERPID} is active" >&2
+        exit ${ENO_LOCKFAIL}
+    fi
+
+    if ! kill -0 ${OTHERPID} &>/dev/null; then
+        echo "removing stale lock of nonexistant PID ${OTHERPID}" >&2
+        rm -rf "${LOCKDIR}"
+        echo "[restic-runner]" restarting myself >&2
+        exec $0 $*
+    else
+        echo "lock failed, PID ${OTHERPID} is active" >&2
+        exit ${ENO_LOCKFAIL}
+    fi
+fi
+
 # * Functions
 
 # ** Script functions
@@ -110,6 +146,7 @@ function log {
 function cleanup {
     # Remove temporary exclude file if it exists
     [[ -f $exclude_file ]] && rm -f "$exclude_file"
+    [[ -d $LOCKDIR ]] && rm -rf "$LOCKDIR"
 }
 
 # ** Helper functions
@@ -251,7 +288,7 @@ function backup {
     log "BACKING UP..."
 
     # Cleanup exclude file on exit
-    trap cleanup EXIT INT TERM
+    #trap cleanup EXIT INT TERM
 
     restic backup \
            --one-file-system \
